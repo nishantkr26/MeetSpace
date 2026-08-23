@@ -1,4 +1,4 @@
-package com.meetspace.meetspace_backend.dto;
+package com.meetspace.meetspace_backend.dto.auth;
 
 public class AuthRequest{
     public record Signup (String name,String email,String password) {}

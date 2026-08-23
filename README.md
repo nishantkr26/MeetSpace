@@ -1,2 +1,0 @@
-# MeetSpace
-WebRtc based Application

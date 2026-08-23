@@ -1,4 +1,4 @@
-package com.meetspace.meetspace_backend.utils;
+package com.meetspace.meetspace_backend.security;
 
 import java.nio.charset.StandardCharsets;
 import java.security.Key;

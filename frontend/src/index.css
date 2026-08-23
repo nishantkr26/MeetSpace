@@ -1,111 +1,92 @@
-:root {
-  --text: #6b6375;
-  --text-h: #08060d;
-  --bg: #fff;
-  --border: #e5e4e7;
-  --code-bg: #f4f3ec;
-  --accent: #aa3bff;
-  --accent-bg: rgba(170, 59, 255, 0.1);
-  --accent-border: rgba(170, 59, 255, 0.5);
-  --social-bg: rgba(244, 243, 236, 0.5);
-  --shadow:
-    rgba(0, 0, 0, 0.1) 0 10px 15px -3px, rgba(0, 0, 0, 0.05) 0 4px 6px -2px;
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
 
-  --sans: system-ui, 'Segoe UI', Roboto, sans-serif;
-  --heading: system-ui, 'Segoe UI', Roboto, sans-serif;
-  --mono: ui-monospace, Consolas, monospace;
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
 
-  font: 18px/145% var(--sans);
-  letter-spacing: 0.18px;
-  color-scheme: light dark;
-  color: var(--text);
-  background: var(--bg);
-  font-synthesis: none;
-  text-rendering: optimizeLegibility;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
+@layer base {
+  * {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+  }
 
-  @media (max-width: 1024px) {
-    font-size: 16px;
+  html, body, #root {
+    height: 100%;
+    width: 100%;
+  }
+
+  body {
+    @apply bg-canvas text-ink font-sans antialiased;
+  }
+
+  ::selection {
+    @apply bg-accent/30;
   }
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --text: #9ca3af;
-    --text-h: #f3f4f6;
-    --bg: #16171d;
-    --border: #2e303a;
-    --code-bg: #1f2028;
-    --accent: #c084fc;
-    --accent-bg: rgba(192, 132, 252, 0.15);
-    --accent-border: rgba(192, 132, 252, 0.5);
-    --social-bg: rgba(47, 48, 58, 0.5);
-    --shadow:
-      rgba(0, 0, 0, 0.4) 0 10px 15px -3px, rgba(0, 0, 0, 0.25) 0 4px 6px -2px;
+@layer components {
+  .btn {
+    @apply inline-flex shrink-0 items-center justify-center gap-2 whitespace-nowrap
+           rounded-lg px-4 py-2.5 text-sm font-medium
+           transition-colors duration-150 disabled:opacity-40 disabled:pointer-events-none
+           focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60 focus-visible:ring-offset-2
+           focus-visible:ring-offset-canvas;
   }
 
-  #social .button-icon {
-    filter: invert(1) brightness(2);
+  .btn-primary {
+    @apply btn bg-accent text-white hover:bg-accent-hover;
   }
-}
 
-#root {
-  width: 1126px;
-  max-width: 100%;
-  margin: 0 auto;
-  text-align: center;
-  border-inline: 1px solid var(--border);
-  min-height: 100svh;
-  display: flex;
-  flex-direction: column;
-  box-sizing: border-box;
-}
-
-body {
-  margin: 0;
-}
-
-h1,
-h2 {
-  font-family: var(--heading);
-  font-weight: 500;
-  color: var(--text-h);
-}
-
-h1 {
-  font-size: 56px;
-  letter-spacing: -1.68px;
-  margin: 32px 0;
-  @media (max-width: 1024px) {
-    font-size: 36px;
-    margin: 20px 0;
+  .btn-secondary {
+    @apply btn bg-elevated text-ink border border-line hover:border-line-strong hover:bg-line/40;
   }
-}
-h2 {
-  font-size: 24px;
-  line-height: 118%;
-  letter-spacing: -0.24px;
-  margin: 0 0 8px;
-  @media (max-width: 1024px) {
-    font-size: 20px;
+
+  .btn-ghost {
+    @apply btn text-ink-muted hover:text-ink hover:bg-elevated;
   }
-}
-p {
-  margin: 0;
-}
 
-code,
-.counter {
-  font-family: var(--mono);
-  display: inline-flex;
-  border-radius: 4px;
-  color: var(--text-h);
-}
+  .btn-danger {
+    @apply btn bg-danger/10 text-danger border border-danger/30 hover:bg-danger/20;
+  }
 
-code {
-  font-size: 15px;
-  line-height: 135%;
-  padding: 4px 8px;
-  background: var(--code-bg);
+  .card {
+    @apply bg-surface border border-line rounded-xl p-5 shadow-card;
+  }
+
+  .input-field {
+    @apply w-full rounded-lg bg-elevated border border-line px-3.5 py-2.5 text-sm text-ink
+           placeholder:text-ink-faint transition-colors
+           focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent;
+  }
+
+  .label {
+    @apply block text-xs font-medium text-ink-muted mb-1.5;
+  }
+
+  .code-chip {
+    @apply font-mono text-sm tracking-wider text-ink bg-elevated border border-line
+           rounded-md px-2.5 py-1.5 break-all;
+  }
+
+  .badge {
+    @apply inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap
+           rounded-full px-2.5 py-1 text-xs font-medium;
+  }
+
+  .badge-live {
+    @apply badge bg-live/10 text-live;
+  }
+
+  .badge-scheduled {
+    @apply badge bg-scheduled/10 text-scheduled;
+  }
+
+  .badge-ended {
+    @apply badge bg-ended/10 text-ink-faint;
+  }
+
+  .dot {
+    @apply h-1.5 w-1.5 shrink-0 rounded-full bg-current;
+  }
 }
