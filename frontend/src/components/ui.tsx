@@ -8,15 +8,20 @@ const AVATAR_TONES = [
   'from-rose-500 to-pink-600',
 ];
 
+// These three take `string` and are called with whatever the API returned. A
+// field that arrives undefined used to throw here, and a throw during render
+// unmounts the entire app — the blank page you get has no hint that a single
+// missing name caused it. Degrading to a placeholder keeps the damage local.
 export function initialsOf(name: string) {
-  const parts = name.trim().split(/\s+/).filter(Boolean);
+  const parts = (name ?? '').trim().split(/\s+/).filter(Boolean);
   if (!parts.length) return '?';
   return (parts[0][0] + (parts[1]?.[0] ?? '')).toUpperCase();
 }
 
 export function toneOf(seed: string) {
+  const text = seed ?? '';
   let h = 0;
-  for (let i = 0; i < seed.length; i++) h = (h * 31 + seed.charCodeAt(i)) >>> 0;
+  for (let i = 0; i < text.length; i++) h = (h * 31 + text.charCodeAt(i)) >>> 0;
   return AVATAR_TONES[h % AVATAR_TONES.length];
 }
 
@@ -38,7 +43,7 @@ export function StatusPill({ status }: { status: string }) {
     SCHEDULED: 'bg-scheduled/15 text-scheduled ring-1 ring-scheduled/25',
     ENDED: 'bg-white/5 text-ink-faint ring-1 ring-white/10',
   };
-  const label = status.charAt(0) + status.slice(1).toLowerCase();
+  const label = status ? status.charAt(0) + status.slice(1).toLowerCase() : 'Unknown';
   return (
     <span className={`badge ${map[status] ?? map.ENDED}`}>
       {status === 'LIVE' ? (

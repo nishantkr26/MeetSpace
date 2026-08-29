@@ -1,23 +1,12 @@
 import type { Participant } from '../types/participant';
 
-const API_BASE_URL = 'http://localhost:8080';
+const API_BASE_URL = import.meta.env.VITE_API_URL;
 
 interface AuthResponse {
   token: string;
   email: string;
   userId: number;
   name: string;
-}
-
-interface Meeting {
-  id: number;
-  meetingCode: string;
-  title: string;
-  hostId: number;
-  hostName: string;
-  status: 'SCHEDULED' | 'LIVE' | 'ENDED';
-  createdAt: string;
-  startedAt: string | null;
 }
 
 interface MeetingResponse {
@@ -92,7 +81,7 @@ class API {
   }
 
   // Meetings
-  async createMeeting(title: string): Promise<Meeting> {
+  async createMeeting(title: string): Promise<MeetingResponse> {
     const response = await fetch(`${API_BASE_URL}/meeting`, {
       method: 'POST',
       headers: this.getHeaders(),
@@ -164,4 +153,4 @@ class API {
 }
 
 export const api = new API();
-export type { Meeting, MeetingResponse, JoinMeetingResponse, LeaveMeetingResponse, EndMeetingResponse };
+export type { MeetingResponse, JoinMeetingResponse, LeaveMeetingResponse, EndMeetingResponse };

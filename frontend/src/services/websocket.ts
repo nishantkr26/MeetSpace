@@ -1,4 +1,6 @@
 import { Client } from "@stomp/stompjs";
+const wsUrl = import.meta.env.VITE_WS_URL;
+
 
 /** Mirrors the backend record `dto.WebSocket.MeetingMessage`. */
 export interface MeetingMessage {
@@ -16,6 +18,15 @@ export interface ParticipantListMessage {
     participants: { userId: number; userName: string }[];
 }
 
+export interface WebRTCSignalMessage {
+    type:"OFFER" | "ANSWER" | "ICE_CANDIDATE";
+    meetingCode : string;
+    fromUserId: number;
+    toUserId: number;
+    data: unknown;
+
+}
+
 let client: Client | null = null;
 
 export const connectWebSocket = (onConnect: () => void) => {
@@ -30,7 +41,7 @@ export const connectWebSocket = (onConnect: () => void) => {
     }
 
     client = new Client({
-        brokerURL: "ws://localhost:8080/ws", reconnectDelay: 5000,
+        brokerURL: wsUrl, reconnectDelay: 5000,
         connectHeaders: { Authorization: `Bearer ${token}` },
         onConnect: () => {
             console.log("WebSocket Connected");
@@ -118,3 +129,33 @@ export const sendLeaveEvent= (meetingCode: string) => {
         body : JSON.stringify({ meetingCode })
     })
 }
+
+/**
+ * Offers, answers and ICE candidates addressed to this user alone. The server
+ * resolves `/user` against the session's Principal, so each client only ever
+ * sees the signals meant for it.
+ */
+export const subscribeToWebRTCSignals = (callback : (message: WebRTCSignalMessage) => void) => {
+    if(!client?.connected){
+        console.error("WebSocket is not connected");
+        return;
+    }
+    return client.subscribe("/user/queue/webrtc",(message) => {
+        const data = JSON.parse(message.body);
+        callback(data);
+    })
+}
+
+// `fromUserId` is sent for symmetry but the server overwrites it from the
+// authenticated session — a client cannot sign a signal as somebody else.
+export const sendRTCSignal = (signal:WebRTCSignalMessage) => {
+    if(!client?.connected){
+        console.error("WebSocket is not connected");
+        return;
+    }
+
+    client.publish({
+        destination:"/app/webrtc.signal",
+        body:JSON.stringify(signal)
+    });
+};

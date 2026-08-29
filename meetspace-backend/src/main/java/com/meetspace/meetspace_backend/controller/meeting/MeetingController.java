@@ -15,7 +15,6 @@ import com.meetspace.meetspace_backend.dto.meeting.MeetingDTO.CreateMeeting;
 import com.meetspace.meetspace_backend.dto.meeting.MeetingDTO.EndMeetingResponse;
 import com.meetspace.meetspace_backend.dto.meeting.MeetingDTO.MeetingResponse;
 import com.meetspace.meetspace_backend.dto.meeting.ParticipantResponse;
-import com.meetspace.meetspace_backend.entity.Meeting;
 import com.meetspace.meetspace_backend.service.MeetingService;
 
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
@@ -29,9 +28,8 @@ public class MeetingController {
     private final MeetingService meetingService;
 
     @PostMapping
-    public ResponseEntity<Meeting> createMeeting(@RequestBody CreateMeeting request) {
-        Meeting meeting = meetingService.createMeetingService(request);
-        return ResponseEntity.status(201).body(meeting);
+    public ResponseEntity<MeetingResponse> createMeeting(@RequestBody CreateMeeting request) {
+        return ResponseEntity.status(201).body(meetingService.createMeetingService(request));
     }
 
     @GetMapping("/{meetingCode}")

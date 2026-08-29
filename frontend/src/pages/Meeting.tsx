@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { api } from '../services/api';
 import type { MeetingResponse } from '../services/api';
@@ -8,13 +8,27 @@ import { useMediaStream } from '../hooks/useMediaStream';
 import { MEDIA_PREFS_KEY } from './Lobby';
 import {
   connectWebSocket, disconnectWebSocket, subscribeMeeting, subscribeParticipantList,
-  sendJoinEvent, sendLeaveEvent,
+  sendJoinEvent, sendLeaveEvent,subscribeToWebRTCSignals,
 } from '../services/websocket';
+
 import type { Participant } from '../types/participant';
 import {
   Mic, MicOff, Video, VideoOff, Screen, PhoneOff,
   Play, Copy, Check, ArrowLeft, Users,
 } from '../components/icons';
+import { useWebRTC } from '../hooks/useWebRtc';
+
+/**
+ * Only the states worth saying out loud. `connected` is deliberately absent: a
+ * working call should say nothing, just show the person.
+ */
+const CONNECTION_LABEL: Partial<Record<RTCPeerConnectionState, string>> = {
+  new: 'Connecting…',
+  connecting: 'Connecting…',
+  disconnected: 'Reconnecting…',
+  failed: 'Connection failed',
+  closed: 'Disconnected',
+};
 
 export function Meeting() {
   const navigate = useNavigate();
@@ -36,9 +50,20 @@ export function Meeting() {
   // Everyone who has announced themselves on this meeting's topic.
   const [participants, setParticipants] = useState<Participant[]>([]);
 
-  // Local camera/mic. Remote peers need signalling, which does not exist yet,
-  // so this tile is the only live one in the room.
+  // Local camera/mic.
   const media = useMediaStream(true);
+
+  // Peer connections to everyone else, keyed by their user id. `mediaSettled`
+  // tells the hook the camera question has been answered one way or the other,
+  // so it can stop holding incoming offers back.
+  const mediaSettled = media.phase !== 'idle' && media.phase !== 'prompting';
+  const { remoteStreams, remoteMedia, peerStates, handleSignal, callPeer, removePeer } =
+    useWebRTC(meetingCode!, userId, media.stream, mediaSettled);
+
+  // Peers we want to call, held until the local camera is actually ready — an
+  // offer built before then carries no tracks, and connects to a black tile.
+  // `callPeer` is idempotent, so this list can be replayed freely.
+  const [pendingCalls, setPendingCalls] = useState<number[]>([]);
 
   // Apply the choices made in the lobby, once the devices are actually ready.
   useEffect(() => {
@@ -56,11 +81,31 @@ export function Meeting() {
     }
   }, [media.phase, meetingCode]);
 
+  // Status (SCHEDULED → LIVE → ENDED) is only ever changed by the host, over
+  // REST. There is no websocket event for it, so everyone else finds out by
+  // asking. Replace this with a broadcast on the meeting topic and the interval
+  // below can go.
+  const loadMeeting = useCallback(async () => {
+    try {
+      if (!meetingCode) return;
+      const data = await api.getMeeting(meetingCode);
+      setMeeting(data);
+      setError('');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load meeting');
+    } finally {
+      setLoading(false);
+    }
+  }, [meetingCode]);
+
   useEffect(() => {
+    // loadMeeting is async and touches no state before its first await, so
+    // nothing is set synchronously here — the rule cannot see through the call.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     loadMeeting();
     const interval = setInterval(loadMeeting, 5000);
     return () => clearInterval(interval);
-  }, [meetingCode]);
+  }, [loadMeeting]);
 
   // Announce this user on the meeting topic, and track everyone else's
   // announcements. Subscribe before publishing, or the echo of our own join
@@ -77,9 +122,27 @@ export function Meeting() {
       // event it should have preceded — assigning it wholesale is safe.
       subscribeParticipantList((message) => {
         setParticipants(message.participants);
+
+        // Everyone in this snapshot was already here when we arrived, so we are
+        // the one who offers and they answer — that asymmetry is what stops both
+        // sides dialling at once. Queued rather than called: the camera may not
+        // be ready yet.
+        setPendingCalls(
+          message.participants
+            .filter((p) => p.userId !== userId)
+            .map((p) => p.userId),
+        );
       });
 
       subscribeMeeting(meetingCode, (message) => {
+        if (message.type === 'USER_LEFT') {
+          // Their peer connection is dead the moment they go, and ICE would spend
+          // half a minute discovering that on its own. removePeer also forgets we
+          // ever dialled them, so a rejoin gets a fresh offer rather than being
+          // answered on a connection that no longer exists.
+          removePeer(message.userId);
+        }
+
         setParticipants((current) => {
           if (message.type === 'USER_LEFT') {
             return current.filter((p) => p.userId !== message.userId);
@@ -90,6 +153,8 @@ export function Meeting() {
             : [...current, { userId: message.userId, userName: message.userName }];
         });
       });
+
+      subscribeToWebRTCSignals(handleSignal);
 
       sendJoinEvent(meetingCode);
     });
@@ -105,18 +170,14 @@ export function Meeting() {
     };
   }, [meetingCode, email]);
 
-  const loadMeeting = async () => {
-    try {
-      if (!meetingCode) return;
-      const data = await api.getMeeting(meetingCode);
-      setMeeting(data);
-      setError('');
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load meeting');
-    } finally {
-      setLoading(false);
-    }
-  };
+  // Drain the queue once the camera is up. Splitting this from the roster
+  // callback is what lets the offer wait for tracks without holding up the join.
+  // Safe to re-run on every stream or roster change: callPeer ignores anyone it
+  // has already dialled, and forgets them again if the connection is torn down.
+  useEffect(() => {
+    if (!media.stream) return;
+    pendingCalls.forEach(callPeer);
+  }, [media.stream, pendingCalls, callPeer]);
 
   const isHost = meeting?.hostId === userId;
 
@@ -217,15 +278,45 @@ export function Meeting() {
       {/* stage + rail */}
       <main className="flex flex-1 flex-col gap-4 px-4 pb-4 sm:px-6 lg:min-h-0 lg:flex-row lg:gap-6 lg:overflow-hidden lg:pb-6">
         <section className="flex min-w-0 flex-col gap-4 lg:min-h-0 lg:flex-1">
-          <div className="grid place-items-center lg:min-h-0 lg:flex-1">
-            <VideoPreview
-              stream={media.stream}
-              name={displayName}
-              camOn={media.camOn}
-              micOn={media.micOn}
-              label={`${displayName} (you)`}
-              className="w-full animate-rise lg:max-w-[calc((100vh-16rem)*16/9)]"
-            />
+          <div className="grid w-full place-items-center lg:min-h-0 lg:flex-1">
+            <div
+              className={`grid w-full gap-3 ${
+                remoteStreams.size > 0
+                  ? 'sm:grid-cols-2'
+                  : 'lg:max-w-[calc((100vh-16rem)*16/9)]'
+              }`}
+            >
+              <VideoPreview
+                stream={media.stream}
+                name={displayName}
+                camOn={media.camOn}
+                micOn={media.micOn}
+                label={`${displayName} (you)`}
+                className="w-full animate-rise"
+              />
+
+              {/* One tile per negotiated peer. Not mirrored — mirroring is a
+                  courtesy for looking at yourself, and wrong for anyone else —
+                  and not muted, which is the whole point of the remote audio. */}
+              {[...remoteStreams].map(([id, stream]) => {
+                const peer = participants.find((p) => p.userId === id);
+                const name = peer?.userName ?? 'Participant';
+                const status = CONNECTION_LABEL[peerStates.get(id) ?? 'new'];
+                return (
+                  <VideoPreview
+                    key={id}
+                    stream={stream}
+                    name={name}
+                    camOn={remoteMedia.get(id)?.camOn ?? true}
+                    micOn={remoteMedia.get(id)?.micOn ?? true}
+                    mirrored={false}
+                    muted={false}
+                    label={status ? `${name} · ${status}` : name}
+                    className="w-full animate-rise"
+                  />
+                );
+              })}
+            </div>
           </div>
 
           {!ended && (

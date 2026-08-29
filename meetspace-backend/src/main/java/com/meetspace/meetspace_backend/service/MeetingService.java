@@ -33,24 +33,12 @@ public class MeetingService {
     private final MeetingCodeGenerator meetingCodeGenerator;
     private final MeetingParticipantRepository meetingParticipantRepository;
 
-    public Meeting createMeetingService(CreateMeeting request) {
-        String email = getAuthenticatedUserEmail();
-        User user = userRepository.findByEmail(email).orElseThrow(() -> new RuntimeException("User not found"));
-
-        Meeting meeting = Meeting.builder()
-                .meetingCode(meetingCodeGenerator.generate())
-                .title(request.title())
-                .host(user)
-                .status(MeetingStatus.SCHEDULED)
-                .build();
-
-        return meetingRepository.save(meeting);
-    }
-
-    public MeetingResponse getMeeting(String meetingCode) {
-        Meeting meeting = meetingRepository.findByMeetingCode(meetingCode)
-                .orElseThrow(() -> new RuntimeException("Meeting not found"));
-
+    /**
+     * The one shape every meeting endpoint hands back. Returning the entity instead
+     * leaks a lazily-loaded `host` relation and no `hostName` at all, which the
+     * client has no way to render — so nothing here returns a Meeting.
+     */
+    private MeetingResponse toResponse(Meeting meeting) {
         return new MeetingResponse(
                 meeting.getId(),
                 meeting.getMeetingCode(),
@@ -62,20 +50,31 @@ public class MeetingService {
                 meeting.getStartedAt());
     }
 
+    public MeetingResponse createMeetingService(CreateMeeting request) {
+        String email = getAuthenticatedUserEmail();
+        User user = userRepository.findByEmail(email).orElseThrow(() -> new RuntimeException("User not found"));
+
+        Meeting meeting = Meeting.builder()
+                .meetingCode(meetingCodeGenerator.generate())
+                .title(request.title())
+                .host(user)
+                .status(MeetingStatus.SCHEDULED)
+                .build();
+
+        return toResponse(meetingRepository.save(meeting));
+    }
+
+    public MeetingResponse getMeeting(String meetingCode) {
+        Meeting meeting = meetingRepository.findByMeetingCode(meetingCode)
+                .orElseThrow(() -> new RuntimeException("Meeting not found"));
+
+        return toResponse(meeting);
+    }
+
     public List<MeetingResponse> getAllMeetings() {
         String email = getAuthenticatedUserEmail();
         List<Meeting> meetings = meetingRepository.findByHost_Email(email);
-        return meetings.stream()
-                .map(meeting -> new MeetingResponse(
-                        meeting.getId(),
-                        meeting.getMeetingCode(),
-                        meeting.getTitle(),
-                        meeting.getHost().getId(),
-                        meeting.getHost().getName(),
-                        meeting.getStatus(),
-                        meeting.getCreatedAt(),
-                        meeting.getStartedAt()))
-                .toList();
+        return meetings.stream().map(this::toResponse).toList();
     }
 
     /** Who is in the meeting right now — seeds the client roster before any websocket event lands. */
@@ -204,15 +203,7 @@ public class MeetingService {
         meeting.setStartedAt(LocalDateTime.now());
         meeting = meetingRepository.save(meeting);
 
-        return new MeetingResponse(
-                meeting.getId(),
-                meeting.getMeetingCode(),
-                meeting.getTitle(),
-                meeting.getHost().getId(),
-                meeting.getHost().getName(),
-                meeting.getStatus(),
-                meeting.getCreatedAt(),
-                meeting.getStartedAt());
+        return toResponse(meeting);
     }
 
     public EndMeetingResponse endMeeting(String meetingCode) {
@@ -246,6 +237,12 @@ public class MeetingService {
                 meeting.getStartedAt(),
                 meeting.getEndedAt());
     }
+
+    @Transactional(readOnly = true)
+    public String getEmailByUserId(Long userId){
+        return userRepository.findById(userId).map(User::getEmail).orElseThrow(() ->  new RuntimeException("Unable to find the user"));
+    }
+
 
     private String getAuthenticatedUserEmail() {
         Object principal = SecurityContextHolder.getContext().getAuthentication().getPrincipal();

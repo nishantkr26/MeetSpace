@@ -11,6 +11,7 @@ import org.springframework.stereotype.Controller;
 import com.meetspace.meetspace_backend.dto.meeting.ParticipantResponse;
 import com.meetspace.meetspace_backend.dto.websocket.MeetingMessage;
 import com.meetspace.meetspace_backend.dto.websocket.ParticipantListMessage;
+import com.meetspace.meetspace_backend.dto.websocket.WebRTCSignalMessage;
 import com.meetspace.meetspace_backend.enums.websocket.MeetingMessageType;
 import com.meetspace.meetspace_backend.service.MeetingService;
 
@@ -77,6 +78,29 @@ public class MeetingWebSocketController {
                 email,
                 identity.userName(),
                 message.meetingCode());
+    }
+
+    @MessageMapping("/webrtc.signal")
+    public void handleWebRTCSignal(WebRTCSignalMessage message,Principal principal){
+
+        if(principal == null){
+            throw new IllegalArgumentException("Unauthenticated Session");
+        }
+
+        ParticipantResponse sender = meetingService.getIdentity(principal.getName());
+
+        WebRTCSignalMessage outbound = new WebRTCSignalMessage(
+            message.type(),
+            message.meetingCode(),
+            sender.userId(),
+            message.toUserId(),
+            message.data()
+        );
+
+        String recipientMail = meetingService.getEmailByUserId(message.toUserId());
+
+        
+        messagingTemplate.convertAndSendToUser(recipientMail,"/queue/webrtc", outbound);
     }
 
     /**

@@ -182,7 +182,11 @@ export function Dashboard() {
             {meetings.map((meeting) => (
               <button
                 key={meeting.id}
-                onClick={() => navigate(`/meeting/${meeting.meetingCode}`)}
+                // Via the lobby, never straight to the room. The lobby is what
+                // calls api.joinMeeting, and that database row is what puts you
+                // in the roster snapshot other people dial from — jumping
+                // straight in makes you invisible to WebRTC.
+                onClick={() => navigate(`/lobby/${meeting.meetingCode}`)}
                 className="group overflow-hidden rounded-xl border border-line bg-surface text-left
                            transition-colors hover:border-line-strong"
               >
